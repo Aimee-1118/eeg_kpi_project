@@ -1,6 +1,10 @@
 # 📜 base_config.yaml
 # "교회 vs 시장" 환경 분류를 위한 기본 설정 파일
 
+# --- 0. (신규) 실험 관리 ---
+EXPERIMENT_NAME: "EEG_KPI_Analysis" # MLflow UI에 표시될 실험 그룹 이름
+GLOBAL_RANDOM_SEED: 42 # 🧬 재현성을 위한 글로벌 시드
+
 # --- 1. 경로 설정 (Paths) ---
 DATA_PATH: "./data_raw/"
 RESULTS_PATH: "./results/"
@@ -17,7 +21,8 @@ FILTER_H_FREQ: 40.0
 NOTCH_FREQ: 60.0
 USE_ICA: False
 EOG_CHANNEL_NAME: 'Fp1'
-ICA_RANDOM_STATE: 97
+# (🔥 수정) 글로벌 시드를 참조하도록 변경
+ICA_RANDOM_STATE: ${GLOBAL_RANDOM_SEED}
 
 # --- 4. 모듈 4: 데이터 분할 & 정제 설정 ---
 EVENT_IDS:

@@ -14,6 +14,9 @@ env/
 data_raw/
 results/
 
+# MLflow 실험 로그
+mlruns/
+
 # IDE/에디터 설정 파일
 .vscode/
 .idea/
