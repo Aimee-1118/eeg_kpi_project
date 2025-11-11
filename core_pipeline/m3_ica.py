@@ -1,5 +1,6 @@
 # 📜 core_pipeline/m3_ica.py
 # 모듈 3: ICA(독립성분분석)를 실행하여 핵심 노이즈(특히 EOG)를 제거합니다.
+# (🔥 config.py 설정값을 참조하도록 하드코딩 수정됨)
 
 import mne
 import config  # config.py를 타입 힌팅 및 설정값 로드를 위해 임포트
@@ -9,8 +10,7 @@ def run_ica_and_clean(raw: mne.io.RawArray, cfg: config) -> mne.io.RawArray:
     MNE Raw 객체에 ICA를 적용하여 EOG(눈 깜빡임) 아티팩트를 제거합니다.
 
     - 2채널(Fp1, Fp2) 환경에서는 EOG 전용 채널이 없습니다.
-    - Fp1(cfg.CHANNELS[0])을 EOG 감지용 채널로 사용하여,
-      Fp1에서 감지된 '이벤트'와 가장 유사한 ICA 컴포넌트를 EOG로 간주하고 제거합니다.
+    - (🔥 수정) config의 EOG_CHANNEL_NAME(예: 'Fp1')을 EOG 감지용 채널로 사용합니다.
     - ICA '학습'은 1.0Hz로 필터링된 임시 데이터로 수행합니다.
     - ICA '적용'은 모듈 2에서 받은 원본(0.5Hz 필터링) 데이터에 수행합니다.
 
@@ -39,7 +39,8 @@ def run_ica_and_clean(raw: mne.io.RawArray, cfg: config) -> mne.io.RawArray:
         ica = mne.preprocessing.ICA(
             n_components=n_comps,  # 2채널이므로 2개의 컴포넌트
             method='fastica',      # 'picard'가 설치되어 있다면 'picard'가 더 좋음
-            random_state=97,       # 재현성을 위한 random state
+            # (🔥 수정) config.py의 ICA_RANDOM_STATE 값 참조
+            random_state=cfg.ICA_RANDOM_STATE, 
             max_iter='auto'
         )
         
@@ -50,22 +51,30 @@ def run_ica_and_clean(raw: mne.io.RawArray, cfg: config) -> mne.io.RawArray:
         # 4. EOG (눈 깜빡임) 아티팩트 자동 탐지
         eog_indices = []
         
-        # Fp1 채널(config.CHANNELS[0])을 EOG 탐지용 채널로 가정
-        eog_ch_name = cfg.CHANNELS[0] 
-        print(f"[M3] '{eog_ch_name}' 채널을 기준으로 EOG 이벤트 탐색 중...")
-
-        # 4a. EOG 이벤트(깜빡임 시점) 찾기
-        # (Fp1 채널에서 1-10Hz 사이의 신호로 눈 깜빡임 이벤트를 찾음)
-        eog_events = mne.preprocessing.find_eog_events(raw, ch_name=eog_ch_name, l_freq=1.0, h_freq=10.0, verbose=False)
+        # (🔥 수정) config.py에서 EOG 탐지용 채널 이름(예: 'Fp1') 가져오기
+        eog_ch_name = cfg.EOG_CHANNEL_NAME
+        
+        # 설정된 EOG 채널이 실제 EEG 채널 목록에 있는지 확인
+        if eog_ch_name not in raw.ch_names:
+            print(f"[M3-ERROR] config의 EOG_CHANNEL_NAME('{eog_ch_name}')이(가) 로드된 채널({raw.ch_names})에 없습니다.")
+            print(f"    EOG 자동 탐지를 건너뜁니다.")
+            eog_events = []
+        else:
+            print(f"[M3] '{eog_ch_name}' 채널을 기준으로 EOG 이벤트 탐색 중...")
+            # 4a. EOG 이벤트(깜빡임 시점) 찾기
+            eog_events = mne.preprocessing.find_eog_events(raw, ch_name=eog_ch_name, l_freq=1.0, h_freq=10.0, verbose=False)
         
         if len(eog_events) < 5:
             print(f"[M3-WARN] EOG 이벤트가 5개 미만({len(eog_events)}개)으로 감지되어, EOG 컴포넌트 탐지에 실패할 수 있습니다.")
         
         # 4b. EOG Epoch (평균 깜빡임 파형) 생성
-        eog_epochs = mne.preprocessing.create_eog_epochs(raw, events=eog_events, ch_name=eog_ch_name, verbose=False)
+        if len(eog_events) > 0:
+            eog_epochs = mne.preprocessing.create_eog_epochs(raw, events=eog_events, ch_name=eog_ch_name, verbose=False)
+        else:
+            eog_epochs = None # 빈 Epochs 객체 대신 None으로 초기화
 
         # 4c. EOG Epoch와 가장 상관관계가 높은 ICA 컴포넌트 찾기
-        if eog_epochs.get_data().shape[0] > 0: # 생성된 Epoch가 있다면
+        if eog_epochs is not None and eog_epochs.get_data().shape[0] > 0: # 생성된 Epoch가 있다면
             eog_indices, eog_scores = ica.find_bads_eog(eog_epochs, ch_name=eog_ch_name, verbose=False)
         
             if eog_indices:
@@ -75,7 +84,7 @@ def run_ica_and_clean(raw: mne.io.RawArray, cfg: config) -> mne.io.RawArray:
             else:
                 print(f"[M3-WARN] EOG와 일치하는 ICA 컴포넌트를 찾지 못했습니다.")
         else:
-             print(f"[M3-WARN] EOG Epoch를 생성하지 못했습니다. EOG 자동 탐지를 건너뜁니다.")
+             print(f"[M3-WARN] EOG Epoch를 생성하지 못했거나 이벤트가 부족합니다. EOG 자동 탐지를 건너뜁니다.")
 
         # 5. 정제된 뇌파 데이터 생성 (Applying)
         # ICA를 '적용'할 때는 모듈 2에서 받은 원본(0.5Hz 필터링) 'raw' 객체를 사용합니다.
