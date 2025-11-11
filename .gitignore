@@ -1,0 +1,19 @@
+# 📜 .gitignore
+
+# Python 캐시 파일
+__pycache__/
+*.pyc
+
+# Python 가상 환경 (만약 사용한다면)
+.venv/
+venv/
+env/
+
+# (매우 중요) 원본 데이터 및 결과 데이터 제외
+# 이 폴더들은 용량이 크므로 Git으로 관리하지 않습니다.
+data_raw/
+results/
+
+# IDE/에디터 설정 파일
+.vscode/
+.idea/

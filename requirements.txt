@@ -1,0 +1,25 @@
+```
+# 📜 requirements.txt
+# 📦 이 프로젝트를 실행하는 데 필요한 Python 라이브러리 목록입니다.
+# (터미널에서 'pip install -r requirements.txt' 명령어로 한 번에 설치할 수 있습니다.)
+
+# --- 핵심 뇌파 분석 (MNE) ---
+mne            # 🧠 뇌파 데이터 로딩, 전처리, ICA, 필터링, Epoch (모듈 1, 2, 3, 4)
+
+# --- 기본 수치 연산 ---
+numpy          # 🔢 모든 데이터의 기본 배열 및 수학 연산
+scipy          # 🔬 필터링, 신호 처리, 통계 함수 (모듈 2, 5)
+
+# --- 데이터 관리 및 저장 ---
+pandas         # 📊 최종 KPI 테이블(DataFrame) 생성 및 CSV 저장 (모듈 6)
+
+# --- 통계 및 머신러닝 ---
+scikit-learn   # 🤖 LASSO 회귀분석, K-Means 클러스터링 (최종 분석용)
+
+# --- 비선형/복잡도 분석 (모듈 5-C) ---
+antropy-mne    # 🌀 샘플 엔트로피(SampEn), 프랙탈 차원(FD) 등 (또는 'antropy'/'nolds' 사용)
+# (참고: MNE와 호환되는 antropy-mne를 권장하나, 순수 'antropy' 라이브러리를 사용할 수도 있습니다.)
+
+# --- (선택) 1/f 지수 분석 ---
+# fooof          # 📉 1/f 지수(Aperiodic Exponent)를 정교하게 계산할 경우
+```
