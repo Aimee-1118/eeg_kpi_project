@@ -1,0 +1,52 @@
+# 📜 base_config.yaml
+# "교회 vs 시장" 환경 분류를 위한 기본 설정 파일
+
+# --- 1. 경로 설정 (Paths) ---
+DATA_PATH: "./data_raw/"
+RESULTS_PATH: "./results/"
+RESULT_FILENAME: "final_kpi_table.csv"
+
+# --- 2. EEG 신호 기본 설정 (Signal Specs) ---
+CHANNELS: ['Fp1', 'Fp2']
+STIM_CHANNEL: 'stim'
+SAMPLE_RATE: 250
+
+# --- 3. 모듈 2 & 3: 전처리 및 ICA 설정 ---
+FILTER_L_FREQ: 0.5
+FILTER_H_FREQ: 40.0
+NOTCH_FREQ: 60.0
+USE_ICA: False
+EOG_CHANNEL_NAME: 'Fp1'
+ICA_RANDOM_STATE: 97
+
+# --- 4. 모듈 4: 데이터 분할 & 정제 설정 ---
+EVENT_IDS:
+  church: 1
+  market: 2
+EPOCH_DURATION_SEC: 5.0
+EPOCH_OVERLAP_SEC: 0.0
+REJECT_THRESHOLD_UV: 100.0
+
+# --- 5. 모듈 5: 핵심 변수 추출 설정 ---
+# B. 주파수축 변수 (Bands)
+BANDS:
+  Delta: [1.0, 4.0]
+  Theta: [4.0, 8.0]
+  Alpha: [8.0, 13.0]
+  Beta: [13.0, 30.0]
+  Gamma: [30.0, 40.0]
+
+WELCH_WINDOW_SEC: 2.0
+APERIODIC_FIT_RANGE_HZ: [1.0, 30.0]
+
+# C. 비선형 변수 (Non-linear)
+SAMPEN_M: 2
+SAMPEN_R_RATIO: 0.2
+
+# C. 동역학
+ALPHA_BURST_THRESHOLD_SD: 1.0
+POWER_VAR_WINDOW_SEC: 1.0
+POWER_VAR_OVERLAP_RATIO: 0.5
+
+# C. 연결성
+CONN_WINDOW_SEC: 2.0

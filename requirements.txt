@@ -21,3 +21,5 @@ antropy        # 🌀 샘플 엔트로피(SampEn), 프랙탈 차원(FD) 등
 
 # --- (선택) 1/f 지수 분석 ---
 fooof          # 📉 1/f 지수(Aperiodic Exponent)를 정교하게 계산할 경우
+
+omegaconf    # ⚙️ YAML 및 CLI 설정 관리를 위해
