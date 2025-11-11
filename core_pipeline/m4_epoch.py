@@ -1,111 +1,123 @@
 # 📜 core_pipeline/m4_epoch.py
-# 모듈 4: 정제된 Raw 데이터를 '사건(Event)' 기준으로 분할(Epoching)하고
+# 모듈 4: 정제된 Raw 데이터를 '상태(Block)' 기준으로 분할(Epoching)하고
 #         최종적으로 아티팩트를 제거(Rejection)합니다.
+# (🔥 "교회 vs 시장" 목표에 맞게 전문 수정됨)
 
 import mne
 import config  # config.py를 타입 힌팅 및 설정값 로드를 위해 임포트
-from typing import Tuple
+from typing import Tuple, Optional
 
-def create_epochs(raw: mne.io.RawArray, cfg: config) -> Tuple[mne.Epochs, mne.Epochs]:
+def create_epochs(raw: mne.io.RawArray, cfg: config) -> Tuple[Optional[mne.Epochs], Optional[mne.Epochs]]:
     """
-    M3에서 정제된 Raw 객체로부터 A와 B/C 두 종류의 Epochs 객체를 생성합니다.
-    
-    - 'stim' 채널에서 모든 이벤트를 찾습니다.
-    - (가정) '첫 대면' 이벤트 ID(예: 1)로 A Epochs (ERP/형태학적)를 생성합니다.
-    - (가정) '판단' 이벤트 ID(예: 2)로 B/C Epochs (주파수/비선형)를 생성합니다.
-    - config에 설정된 REJECT_THRESHOLD_UV 기준으로 아티팩트 Epoch를 제거합니다.
+    M3에서 정제된 Raw 객체로부터 '교회', '시장' 등 상태(Block)별로
+    고정된 길이(예: 5초)의 Epochs 객체를 생성합니다.
+
+    - 'stim' 채널에서 config.EVENT_IDS에 정의된 (예: 1='church', 2='market') 
+      블록 시작 이벤트를 찾습니다.
+    - MNE Annotations를 생성하여 각 블록의 (시작, 지속시간, 라벨)을 정의합니다.
+    - MNE make_fixed_length_epochs를 사용해 이 블록들을 
+      config의 EPOCH_DURATION_SEC (예: 5초) 단위로 분할합니다.
+    - A(ERP)용 Epochs는 None을 반환하고, B/C(상태 분석)용 Epochs만 반환합니다.
 
     Args:
         raw (mne.io.RawArray): M3 모듈에서 ICA로 정제된 Raw 객체
         cfg (config): config.py 모듈 객체
 
     Returns:
-        tuple (mne.Epochs, mne.Epochs):
-            - epochs_A: '첫 대면' 기준 Epochs 객체 (베이스라인 보정 O)
-            - epochs_BC: '연속 거닐기' 기준 Epochs 객체 (베이스라인 보정 X)
-            - 이벤트가 없을 경우 None을 반환합니다.
+        tuple (None, mne.Epochs | None):
+            - epochs_A: None (ERP 분석을 사용하지 않음)
+            - epochs_BC: '교회', '시장' 라벨이 붙은 5초짜리 Epochs 객체
     """
     
-    print(f"[M4] 데이터 분할 및 정제 시작...")
+    print(f"[M4] 데이터 분할(Block Epoching) 및 정제 시작...")
 
-    # --- ❗ 중요: 이 부분은 사용자의 실제 트리거 코드에 맞게 수정해야 합니다 ---
-    # (config.py에 이 변수들을 추가하는 것을 강력히 권장합니다.)
-    EVENT_ID_A = {'first_glimpse': 1}  # '첫 대면' (A)을 유발한 트리거 코드 (예시)
-    EVENT_ID_BC = {'judgment_button': 2} # '연속 거닐기'(BC)의 판단 마커 트리거 코드 (예시)
-    # -------------------------------------------------------------------
-
-    # 1. MNE Raw 객체에서 모든 이벤트(트리거) 찾기
+    # --- 1. MNE Raw 객체에서 모든 이벤트(트리거) 찾기 ---
     try:
-        # MNE가 'stim' 채널을 자동으로 찾아 이벤트를 추출합니다.
-        events = mne.find_events(raw, shortest_event=1, verbose=False)
+        events = mne.find_events(raw, stim_channel=cfg.STIM_CHANNEL, shortest_event=1, verbose=False)
     except Exception as e:
-        print(f"[ERROR M4] 'stim' 채널에서 이벤트를 찾는 데 실패했습니다: {e}")
-        print(f"    M1 로드 시 'STIM' 또는 'TRIGGER' 채널이 포함되었는지,")
-        print(f"    config.py의 CHANNELS 목록에 *포함되지 않았는지* 확인하세요.")
+        print(f"[ERROR M4] 'stim' 채널('{cfg.STIM_CHANNEL}')에서 이벤트를 찾는 데 실패했습니다: {e}")
         return None, None
 
     if events.shape[0] == 0:
         print(f"[WARNING M4] 'stim' 채널에서 어떠한 이벤트도 찾지 못했습니다.")
         return None, None
         
-    print(f"[M4] 총 {events.shape[0]}개의 이벤트를 'stim' 채널에서 감지했습니다.")
+    print(f"[M4] 총 {events.shape[0]}개의 이벤트를 '{cfg.STIM_CHANNEL}' 채널에서 감지했습니다.")
 
-    # 2. Epoch 정제(Rejection) 기준 설정
-    # config에서 µV 단위의 임계값을 V 단위로 변환 (MNE 기본 단위는 V)
-    reject_threshold_volts = cfg.REJECT_THRESHOLD_UV * 1e-6
-    reject_criteria = dict(eeg=reject_threshold_volts)
+    # --- 2. 이벤트를 MNE Annotations로 변환 ---
+    # (MNE에서 블록(Block)을 다루는 표준 방식)
+    event_ids_map = cfg.EVENT_IDS # 예: {'church': 1, 'market': 2}
+    # {1: 'church', 2: 'market'} 형태로 뒤집기
+    event_desc_map = {v: k for k, v in event_ids_map.items()} 
+    
+    onsets = []
+    durations = []
+    descriptions = []
+    sfreq = cfg.SAMPLE_RATE
 
-    # 3. --- Epoch A (형태학적/시간축) 생성 ---
-    epochs_A = None
-    try:
-        # event_id_A(예: 1)에 해당하는 이벤트만 필터링
-        events_A = mne.pick_events(events, include=list(EVENT_ID_A.values()))
+    for i in range(len(events)):
+        event_sample, _, event_id = events[i]
         
-        if len(events_A) > 0:
-            epochs_A = mne.Epochs(
-                raw,
-                events=events_A,
-                event_id=EVENT_ID_A,
-                tmin=cfg.EPOCH_A_TMIN,      # 예: -1.0초
-                tmax=cfg.EPOCH_A_TMAX,      # 예: 3.0초
-                reject=reject_criteria,     # 100µV 초과 Epoch 제외
-                baseline=(cfg.EPOCH_A_TMIN, 0), # 💥 ERP 분석: 베이스라인 보정 필수
-                preload=True,               # KPI 추출을 위해 메모리에 즉시 로드
-                verbose=False
-            )
-            epochs_A.drop_bad() # 리젝 기준에 걸린 Epoch 최종 드랍
-            print(f"[M4] 'A' Epochs 생성 완료: {len(events_A)}개 이벤트 중 {len(epochs_A)}개 생존.")
-        else:
-            print(f"[M4-INFO] 'A' 유형({EVENT_ID_A})의 이벤트를 찾지 못했습니다.")
+        # config에 정의된 이벤트 ID만 처리
+        if event_id in event_desc_map:
+            description = event_desc_map[event_id]
+            onset_sec = event_sample / sfreq
+            
+            # 이 이벤트의 지속시간(duration) 계산
+            # (다음 이벤트 시작 전까지, 또는 파일 끝까지)
+            if i + 1 < len(events):
+                next_event_sample = events[i+1, 0]
+            else:
+                next_event_sample = raw.n_times # 파일 끝
+            
+            duration_sample = next_event_sample - event_sample
+            duration_sec = duration_sample / sfreq
+            
+            onsets.append(onset_sec)
+            durations.append(duration_sec)
+            descriptions.append(description)
+            
+            print(f"[M4] '{description}' 블록 감지: {onset_sec:.2f}초 시작, {duration_sec:.2f}초 지속.")
 
-    except Exception as e:
-        print(f"[ERROR M4] 'A' Epochs 생성 중 오류 발생: {e}")
+    if not descriptions:
+        print(f"[WARNING M4] config.EVENT_IDS {event_ids_map}에 해당하는 이벤트를 찾지 못했습니다.")
+        return None, None
 
-    # 4. --- Epoch B/C (주파수/비선형) 생성 ---
+    # 생성된 Annotations을 Raw 객체에 적용
+    annotations = mne.Annotations(onsets, durations, descriptions)
+    raw_with_annots = raw.copy().set_annotations(annotations)
+
+    # --- 3. 고정 길이 Epochs (Fixed Length Epochs) 생성 ---
+    # (Annotations이 적용된 Raw 객체에서 Epochs를 생성하면
+    #  각 Epoch는 자동으로 'church' 또는 'market' 라벨을 갖게 됩니다.)
+    
     epochs_BC = None
     try:
-        # event_id_BC(예: 2)에 해당하는 이벤트만 필터링
-        events_BC = mne.pick_events(events, include=list(EVENT_ID_BC.values()))
+        # Epoch 정제(Rejection) 기준 설정
+        reject_threshold_volts = cfg.REJECT_THRESHOLD_UV * 1e-6
+        reject_criteria = dict(eeg=reject_threshold_volts)
+
+        epochs_BC = mne.make_fixed_length_epochs(
+            raw_with_annots,
+            duration=cfg.EPOCH_DURATION_SEC,      # 예: 5.0초
+            overlap=cfg.EPOCH_OVERLAP_SEC,        # 예: 0.0초
+            reject=reject_criteria,               # 100µV 초과 Epoch 제외
+            preload=True,                         # KPI 추출을 위해 메모리에 즉시 로드
+            verbose=False
+        )
         
-        if len(events_BC) > 0:
-            epochs_BC = mne.Epochs(
-                raw,
-                events=events_BC,
-                event_id=EVENT_ID_BC,
-                tmin=cfg.EPOCH_BC_TMIN,     # 예: -10.0초
-                tmax=cfg.EPOCH_BC_TMAX,     # 예: 0.0초
-                reject=reject_criteria,     # 100µV 초과 Epoch 제외
-                baseline=None,              # 💥 주파수/상태 분석: 베이스라인 보정 안 함
-                preload=True,               # KPI 추출을 위해 메모리에 즉시 로드
-                verbose=False
-            )
-            epochs_BC.drop_bad() # 리젝 기준에 걸린 Epoch 최종 드랍
-            print(f"[M4] 'B/C' Epochs 생성 완료: {len(events_BC)}개 이벤트 중 {len(epochs_BC)}개 생존.")
-        else:
-            print(f"[M4-INFO] 'B/C' 유형({EVENT_ID_BC})의 이벤트를 찾지 못했습니다.")
+        # (중요) 베이스라인 보정(baseline=None)을 하지 않습니다.
+        #      주파수/상태 분석에는 베이스라인 보정이 필요 없습니다.
+        
+        epochs_BC.drop_bad() # 리젝 기준에 걸린 Epoch 최종 드랍
+        
+        print(f"[M4] 'B/C' Epochs 생성 완료: 총 {len(epochs_BC)}개 생존.")
+        print(f"    Epochs 라벨 분포: {epochs_BC.event_id}")
 
     except Exception as e:
-        print(f"[ERROR M4] 'B/C' Epochs 생성 중 오류 발생: {e}")
+        print(f"[ERROR M4] 고정 길이 Epochs 생성 중 오류 발생: {e}")
+        return None, None
 
-    print(f"[M4] 데이터 분할 및 정제 완료.")
-    return epochs_A, epochs_BC
+    # --- 4. 최종 반환 ---
+    # A(ERP)용 Epochs는 없으므로 None 반환, B/C(상태)용 Epochs만 반환
+    return None, epochs_BC
