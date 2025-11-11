@@ -4,7 +4,7 @@
 
 import os
 import pandas as pd
-import config # config.py를 직접 임포트할 수도 있지만, main.py에서 cfg 객체로 받는 것이 더 유연합니다.
+from omegaconf import DictConfig
 
 # --- 1. 각 모듈의 핵심 기능 임포트 ---
 from core_pipeline.m1_load import load_data_from_csv
@@ -14,7 +14,7 @@ from core_pipeline.m4_epoch import create_epochs
 from features.m5_extract_features import extract_features_from_epochs
 from core_pipeline.m6_save import save_dataframe_to_csv
 
-def run_full_pipeline(cfg: config):
+def run_full_pipeline(cfg: DictConfig):
     """
     M1부터 M6까지 전체 파이프라인을 순차적으로 실행합니다.
     config.py에서 설정된 경로의 모든 CSV 파일을 처리합니다.

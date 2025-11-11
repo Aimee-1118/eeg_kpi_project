@@ -3,15 +3,15 @@
 # (🔥 config.py 설정값 연동 및 1/f 지수 계산 업그레이드)
 
 import numpy as np
-import config
 from scipy.signal import welch
 import antropy as ant
 # (🔥 신규) 1/f 지수(기울기)의 정교한 계산을 위해 fooof 라이브러리 임포트
 from fooof import FOOOF
 # (🔥 신규) 안전한 로그 계산을 위해 utils.py에서 safe_log 임포트
 from .utils import safe_log
+from omegaconf import DictConfig
 
-def get_B_features(epoch_data: np.ndarray, cfg: config, kpi_row: dict):
+def get_B_features(epoch_data: np.ndarray, cfg: DictConfig, kpi_row: dict):
     """
     'B/C' 유형 Epoch 데이터(단일 Epoch)에서 B 카테고리의 모든 KPI를 추출합니다.
     추출된 KPI는 'kpi_row' 딕셔너리에 직접 추가됩니다.

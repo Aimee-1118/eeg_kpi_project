@@ -3,7 +3,6 @@
 # (🔥 "교회 vs 시장" 목표 및 숫자 라벨링을 반영하여 논리 오류 수정됨)
 
 import mne
-import config
 import numpy as np
 from typing import List, Dict, Any, Optional
 
@@ -11,9 +10,10 @@ from typing import List, Dict, Any, Optional
 from .features_A import get_A_features
 from .features_B import get_B_features
 from .features_C import get_C_features
+from omegaconf import DictConfig
 
 
-def extract_features_from_epochs(epochs_A: Optional[mne.Epochs], epochs_BC: Optional[mne.Epochs], cfg: config) -> List[Dict[str, Any]]:
+def extract_features_from_epochs(epochs_A: Optional[mne.Epochs], epochs_BC: Optional[mne.Epochs], cfg: DictConfig) -> List[Dict[str, Any]]:
     """
     [M5] M4에서 받은 Epochs 객체를 순회하며 A, B, C 특징을 추출합니다.
     (🔥 수정됨: 'epochs_BC'만 순회하며 A, B, C를 모두 추출하고, 숫자 라벨을 추가합니다.)

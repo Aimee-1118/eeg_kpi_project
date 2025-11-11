@@ -3,9 +3,9 @@
 
 import pandas as pd
 import os
-import config  # config.py를 타입 힌팅 및 설정값 로드를 위해 임포트
+from omegaconf import DictConfig
 
-def save_dataframe_to_csv(df: pd.DataFrame, cfg: config):
+def save_dataframe_to_csv(df: pd.DataFrame, cfg: DictConfig):
     """
     Pandas DataFrame을 config에 지정된 경로와 파일 이름으로 저장합니다.
 

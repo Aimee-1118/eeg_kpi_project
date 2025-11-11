@@ -2,9 +2,9 @@
 # 모듈 2: MNE Raw 객체에 대해 전처리(필터링)를 수행합니다.
 
 import mne
-import config  # config.py를 타입 힌팅 및 설정값 로드를 위해 임포트
+from omegaconf import DictConfig
 
-def filter_data(raw: mne.io.RawArray, cfg: config) -> mne.io.RawArray:
+def filter_data(raw: mne.io.RawArray, cfg: DictConfig) -> mne.io.RawArray:
     """
     MNE Raw 객체에 대해 노치 필터와 대역통과 필터를 순차적으로 적용합니다.
 

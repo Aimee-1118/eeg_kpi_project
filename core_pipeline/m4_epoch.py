@@ -4,10 +4,10 @@
 # (🔥 "교회 vs 시장" 목표에 맞게 전문 수정됨)
 
 import mne
-import config  # config.py를 타입 힌팅 및 설정값 로드를 위해 임포트
 from typing import Tuple, Optional
+from omegaconf import DictConfig
 
-def create_epochs(raw: mne.io.RawArray, cfg: config) -> Tuple[Optional[mne.Epochs], Optional[mne.Epochs]]:
+def create_epochs(raw: mne.io.RawArray, cfg: DictConfig) -> Tuple[Optional[mne.Epochs], Optional[mne.Epochs]]:
     """
     M3에서 정제된 Raw 객체로부터 '교회', '시장' 등 상태(Block)별로
     고정된 길이(예: 5초)의 Epochs 객체를 생성합니다.

@@ -3,9 +3,9 @@
 # (🔥 config.py 설정값을 참조하도록 하드코딩 수정됨)
 
 import mne
-import config  # config.py를 타입 힌팅 및 설정값 로드를 위해 임포트
+from omegaconf import DictConfig
 
-def run_ica_and_clean(raw: mne.io.RawArray, cfg: config) -> mne.io.RawArray:
+def run_ica_and_clean(raw: mne.io.RawArray, cfg: DictConfig) -> mne.io.RawArray:
     """
     MNE Raw 객체에 ICA를 적용하여 EOG(눈 깜빡임) 아티팩트를 제거합니다.
 

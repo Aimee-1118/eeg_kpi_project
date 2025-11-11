@@ -5,9 +5,9 @@
 import pandas as pd
 import numpy as np
 import mne
-import config  # config.py를 타입 힌팅 및 설정값 로드를 위해 임포트
+from omegaconf import DictConfig
 
-def load_data_from_csv(file_path: str, cfg: config) -> mne.io.RawArray:
+def load_data_from_csv(file_path: str, cfg: DictConfig) -> mne.io.RawArray:
     """
     CSV 파일에서 EEG 데이터와 STIM 데이터를 로드하고 MNE Raw 객체로 변환합니다.
     

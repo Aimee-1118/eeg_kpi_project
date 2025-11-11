@@ -3,10 +3,10 @@
 # (🔥 config.py 설정값 연동 및 import 로직 수정)
 
 import numpy as np
-import config
 import antropy as ant
 from scipy.signal import butter, filtfilt, hilbert, spectrogram, coherence
 from warnings import filterwarnings
+from omegaconf import DictConfig
 
 # (🔥 수정됨) MNE Connectivity 임포트 로직 정리
 # MNE 라이브러리에서 spectral_connectivity 함수를 직접 임포트 시도
@@ -20,7 +20,7 @@ except ImportError:
 # 불필요한 경고 메시지를 숨깁니다.
 filterwarnings("ignore", category=UserWarning, module='mne')
 
-def get_C_features(epoch_data: np.ndarray, cfg: config, kpi_row: dict):
+def get_C_features(epoch_data: np.ndarray, cfg: DictConfig, kpi_row: dict):
     """
     'B/C' 유형 Epoch 데이터(단일 Epoch)에서 C 카테고리의 모든 KPI를 추출합니다.
     추출된 KPI는 'kpi_row' 딕셔너리에 직접 추가됩니다.

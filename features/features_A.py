@@ -3,11 +3,11 @@
 # (🔥 "교회 vs 시장" 목표에 맞게 ERP 로직이 제거됨)
 
 import numpy as np
-import config  # 설정값(sfreq 등)을 사용하기 위해 임포트
 from scipy.stats import skew, kurtosis
 from scipy.signal import find_peaks
+from omegaconf import DictConfig
 
-def get_A_features(epoch_data: np.ndarray, cfg: config, kpi_row: dict):
+def get_A_features(epoch_data: np.ndarray, cfg: DictConfig, kpi_row: dict):
     """
     Epoch 데이터(단일 Epoch)에서 A 카테고리의 모든 KPI를 추출합니다.
     (🔥 수정됨: ERP 관련 로직 삭제. 5초 Epoch의 일반 통계만 계산)
