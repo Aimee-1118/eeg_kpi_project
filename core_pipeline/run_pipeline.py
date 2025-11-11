@@ -1,5 +1,6 @@
 # 📜 core_pipeline/run_pipeline.py
-# 🚀 이 파일은 전체 6모듈 파이프라인의 실행을 총괄 지휘합니다.
+# 🚀 이 파일은 전체 6모듈 파이f프라인의 실행을 총괄 지휘합니다.
+# (🔥 ICA 옵션 처리 로직이 추가됨)
 
 import os
 import pandas as pd
@@ -44,29 +45,34 @@ def run_full_pipeline(cfg: config):
 
         try:
             # --- M1. 데이터 로드 ---
-            # CSV 파일을 MNE Raw 객체로 변환
+            # CSV 파일을 MNE Raw 객체로 변환 (EEG + STIM 채널 포함)
             raw = load_data_from_csv(file_path, cfg)
             
             # --- M2. 전처리 & 필터링 ---
             # 노치 필터 및 대역통과 필터 적용
             raw_filtered = filter_data(raw, cfg)
             
-            # --- M3. 핵심 노이즈 제거 ---
-            # ICA를 실행하여 아티팩트(눈 깜빡임 등) 제거
-            raw_cleaned = run_ica_and_clean(raw_filtered, cfg)
+            # --- (🔥 수정) M3. 핵심 노이즈 제거 (ICA 옵션) ---
+            # config.py의 USE_ICA 플래그 확인
+            if cfg.USE_ICA:
+                print("[M3] config.USE_ICA=True이므로 ICA를 실행합니다.")
+                raw_cleaned = run_ica_and_clean(raw_filtered, cfg)
+            else:
+                print("[M3] config.USE_ICA=False이므로 ICA를 건너뜁니다.")
+                # M2(필터링) 결과를 M4로 바로 전달
+                raw_cleaned = raw_filtered.copy() 
             
             # --- M4. 데이터 분할 & 정제 ---
-            # '첫 대면'(A)과 '연속 거닐기'(BC) Epoch 2종류 생성
+            # '교회/시장' 블록을 5초 Epochs로 생성
             epochs_A, epochs_BC = create_epochs(raw_cleaned, cfg)
             
-            # (선택) 정제 결과 요약
-            if epochs_A is None and epochs_BC is None:
+            # (🔥 수정) M4 로직 변경에 따라 epochs_BC만 확인
+            if epochs_BC is None or len(epochs_BC) == 0:
                 print(f"[WARNING] {file_name}에서 유효한 Epoch를 찾지 못해 건너뜁니다.")
                 continue
 
             # --- M5. 핵심 변수 추출 ---
-            # A, B, C 유형의 모든 KPI를 계산하여 딕셔너리 리스트로 반환
-            # (각 Epoch가 하나의 행(row)이 됨)
+            # A, B, C 유형의 모든 KPI를 계산 (epochs_BC만 사용)
             kpi_rows_for_file = extract_features_from_epochs(epochs_A, epochs_BC, cfg)
             
             # 각 행에 파일 식별자 추가
