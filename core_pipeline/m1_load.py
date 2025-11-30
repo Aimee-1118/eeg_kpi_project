@@ -35,7 +35,8 @@ def load_data_from_csv(file_path: str, cfg: DictConfig) -> mne.io.RawArray:
         df = pd.read_csv(file_path)
 
         # 2. (🔥 수정) config에 정의된 필수 채널(EEG + STIM) 확인
-        eeg_ch_names = cfg.CHANNELS
+        # OmegaConf ListConfig 객체를 파이썬 기본 list로 변환해야 MNE에서 오류가 나지 않습니다.
+        eeg_ch_names = list(cfg.CHANNELS) 
         stim_ch_name = cfg.STIM_CHANNEL
         
         # 2a. EEG 채널 확인

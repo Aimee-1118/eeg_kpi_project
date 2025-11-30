@@ -1,7 +1,7 @@
 # 📜 core_pipeline/m4_epoch.py
 # 모듈 4: 정제된 Raw 데이터를 '상태(Block)' 기준으로 분할(Epoching)하고
 #         최종적으로 아티팩트를 제거(Rejection)합니다.
-# (🔥 "교회 vs 시장" 목표에 맞게 전문 수정됨)
+# (🔥 수정됨: 파일의 조건(A/B)에 따라 Epoch 라벨(1/2)을 올바르게 지정하도록 로직 변경)
 
 import mne
 from typing import Tuple, Optional
@@ -14,10 +14,9 @@ def create_epochs(raw: mne.io.RawArray, cfg: DictConfig) -> Tuple[Optional[mne.E
 
     - 'stim' 채널에서 config.EVENT_IDS에 정의된 (예: 1='church', 2='market') 
       블록 시작 이벤트를 찾습니다.
-    - MNE Annotations를 생성하여 각 블록의 (시작, 지속시간, 라벨)을 정의합니다.
-    - MNE make_fixed_length_epochs를 사용해 이 블록들을 
-      config의 EPOCH_DURATION_SEC (예: 5초) 단위로 분할합니다.
-    - A(ERP)용 Epochs는 None을 반환하고, B/C(상태 분석)용 Epochs만 반환합니다.
+    - (🔥 핵심 수정) 해당 파일이 어떤 조건(1 또는 2)인지 파악하여, 
+      make_fixed_length_epochs의 id 파라미터로 넘겨줍니다.
+    - Epoch 생성 후 drop_bad()를 호출하여 아티팩트를 제거합니다.
 
     Args:
         raw (mne.io.RawArray): M3 모듈에서 ICA로 정제된 Raw 객체
@@ -42,82 +41,43 @@ def create_epochs(raw: mne.io.RawArray, cfg: DictConfig) -> Tuple[Optional[mne.E
         print(f"[WARNING M4] 'stim' 채널에서 어떠한 이벤트도 찾지 못했습니다.")
         return None, None
         
-    print(f"[M4] 총 {events.shape[0]}개의 이벤트를 '{cfg.STIM_CHANNEL}' 채널에서 감지했습니다.")
-
-    # --- 2. 이벤트를 MNE Annotations로 변환 ---
-    # (MNE에서 블록(Block)을 다루는 표준 방식)
+    # --- 2. 대표 이벤트 ID 식별 (🔥 핵심) ---
+    # 현재 파일 구조상, 하나의 파일에는 하나의 조건(A 또는 B)만 존재한다고 가정합니다.
+    # 따라서 감지된 첫 번째 이벤트 ID를 이 파일 전체의 라벨로 사용합니다.
+    main_event_id = int(events[0, 2])
+    
     event_ids_map = cfg.EVENT_IDS # 예: {'church': 1, 'market': 2}
-    # {1: 'church', 2: 'market'} 형태로 뒤집기
     event_desc_map = {v: k for k, v in event_ids_map.items()} 
     
-    onsets = []
-    durations = []
-    descriptions = []
-    sfreq = cfg.SAMPLE_RATE
+    block_name = event_desc_map.get(main_event_id, str(main_event_id))
+    print(f"[M4] 이 파일의 주요 조건: '{block_name}' (ID: {main_event_id})")
 
-    for i in range(len(events)):
-        event_sample, _, event_id = events[i]
-        
-        # config에 정의된 이벤트 ID만 처리
-        if event_id in event_desc_map:
-            description = event_desc_map[event_id]
-            onset_sec = event_sample / sfreq
-            
-            # 이 이벤트의 지속시간(duration) 계산
-            # (다음 이벤트 시작 전까지, 또는 파일 끝까지)
-            if i + 1 < len(events):
-                next_event_sample = events[i+1, 0]
-            else:
-                next_event_sample = raw.n_times # 파일 끝
-            
-            duration_sample = next_event_sample - event_sample
-            duration_sec = duration_sample / sfreq
-            
-            onsets.append(onset_sec)
-            durations.append(duration_sec)
-            descriptions.append(description)
-            
-            print(f"[M4] '{description}' 블록 감지: {onset_sec:.2f}초 시작, {duration_sec:.2f}초 지속.")
-
-    if not descriptions:
-        print(f"[WARNING M4] config.EVENT_IDS {event_ids_map}에 해당하는 이벤트를 찾지 못했습니다.")
-        return None, None
-
-    # 생성된 Annotations을 Raw 객체에 적용
-    annotations = mne.Annotations(onsets, durations, descriptions)
-    raw_with_annots = raw.copy().set_annotations(annotations)
-
-    # --- 3. 고정 길이 Epochs (Fixed Length Epochs) 생성 ---
-    # (Annotations이 적용된 Raw 객체에서 Epochs를 생성하면
-    #  각 Epoch는 자동으로 'church' 또는 'market' 라벨을 갖게 됩니다.)
-    
+    # --- 3. 고정 길이 Epochs 생성 및 정제 ---
     epochs_BC = None
     try:
         # Epoch 정제(Rejection) 기준 설정
         reject_threshold_volts = cfg.REJECT_THRESHOLD_UV * 1e-6
         reject_criteria = dict(eeg=reject_threshold_volts)
 
+        # (🔥 수정됨) id=main_event_id 를 전달하여 올바른 라벨(1 또는 2)을 부여
         epochs_BC = mne.make_fixed_length_epochs(
-            raw_with_annots,
-            duration=cfg.EPOCH_DURATION_SEC,      # 예: 5.0초
-            overlap=cfg.EPOCH_OVERLAP_SEC,        # 예: 0.0초
-            reject=reject_criteria,               # 100µV 초과 Epoch 제외
-            preload=True,                         # KPI 추출을 위해 메모리에 즉시 로드
+            raw,
+            duration=cfg.EPOCH_DURATION_SEC,
+            overlap=cfg.EPOCH_OVERLAP_SEC,
+            id=main_event_id,  # <--- 여기가 핵심 수정 사항입니다!
+            preload=True,
             verbose=False
         )
         
-        # (중요) 베이스라인 보정(baseline=None)을 하지 않습니다.
-        #      주파수/상태 분석에는 베이스라인 보정이 필요 없습니다.
+        # 생성 후 drop_bad() 메서드에 reject 기준 전달
+        # print(f"[M4] 아티팩트 제거 중 (기준: {cfg.REJECT_THRESHOLD_UV} µV)...")
+        epochs_BC.drop_bad(reject=reject_criteria, verbose=False)
         
-        epochs_BC.drop_bad() # 리젝 기준에 걸린 Epoch 최종 드랍
-        
-        print(f"[M4] 'B/C' Epochs 생성 완료: 총 {len(epochs_BC)}개 생존.")
-        print(f"    Epochs 라벨 분포: {epochs_BC.event_id}")
+        print(f"[M4] '{block_name}' Epochs 생성 완료: 총 {len(epochs_BC)}개 생존.")
+        # print(f"    Epochs 라벨 분포: {epochs_BC.event_id}")
 
     except Exception as e:
         print(f"[ERROR M4] 고정 길이 Epochs 생성 중 오류 발생: {e}")
         return None, None
 
-    # --- 4. 최종 반환 ---
-    # A(ERP)용 Epochs는 없으므로 None 반환, B/C(상태)용 Epochs만 반환
     return None, epochs_BC

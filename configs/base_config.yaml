@@ -30,7 +30,7 @@ EVENT_IDS:
   market: 2
 EPOCH_DURATION_SEC: 5.0
 EPOCH_OVERLAP_SEC: 0.0
-REJECT_THRESHOLD_UV: 100.0
+REJECT_THRESHOLD_UV: 500.0
 
 # --- 5. 모듈 5: 핵심 변수 추출 설정 ---
 # B. 주파수축 변수 (Bands)

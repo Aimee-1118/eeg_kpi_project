@@ -1,6 +1,6 @@
 # 📜 core_pipeline/run_pipeline.py
-# 🚀 이 파일은 전체 6모듈 파이f프라인의 실행을 총괄 지휘합니다.
-# (🔥 ICA 옵션 처리 로직이 추가됨)
+# 🚀 이 파일은 전체 6모듈 파이프라인의 실행을 총괄 지휘합니다.
+# (🔥 ICA 옵션 처리 로직 및 예외 처리 강화됨)
 
 import os
 import pandas as pd
@@ -21,27 +21,41 @@ def run_full_pipeline(cfg: DictConfig):
 
     Args:
         cfg (module): main.py로부터 전달받은 config 모듈 객체
+        
+    Returns:
+        tuple: (final_kpi_df, metrics)
+            - final_kpi_df (pd.DataFrame): 모든 파일에서 추출된 KPI가 담긴 데이터프레임
+            - metrics (dict): 파이프라인 실행 결과 요약 정보 (현재는 빈 딕셔너리 반환)
+            - 만약 처리된 데이터가 없다면 (None, None)을 반환합니다.
     """
     
     print(f"[INFO] 파이프라인 매니저: 작업을 시작합니다...")
     
     # 1. 📥 원본 데이터 파일 목록 가져오기
     try:
-        raw_files = [f for f in os.listdir(cfg.DATA_PATH) if f.endswith('.csv')]
+        # 하위 폴더까지 포함하여 모든 .csv 파일 탐색 (재귀적 탐색)
+        # (convert_data.py로 변환된 파일들이 data_raw 바로 아래에 있을 수도 있고, 하위 폴더에 있을 수도 있음)
+        raw_files = []
+        for root, dirs, files in os.walk(cfg.DATA_PATH):
+            for file in files:
+                if file.endswith('.csv'):
+                    raw_files.append(os.path.join(root, file))
+                    
         if not raw_files:
-            print(f"[WARNING] '{cfg.DATA_PATH}' 폴더에 처리할 CSV 파일이 없습니다.")
-            return
+            print(f"[WARNING] '{cfg.DATA_PATH}' 폴더 및 하위 폴더에 처리할 CSV 파일이 없습니다.")
+            return None, None # (🔥 수정) 빈 데이터 반환 시 None, None 반환
+            
     except FileNotFoundError:
         print(f"[ERROR] '{cfg.DATA_PATH}' 폴더를 찾을 수 없습니다. config.py를 확인하세요.")
-        return
+        return None, None # (🔥 수정)
 
     # 2. 🧮 모든 파일의 KPI 결과를 취합할 리스트
     all_kpi_results = []
 
     # 3. 🔁 각 파일을 순차적으로 처리
-    for file_name in raw_files:
+    for file_path in raw_files:
+        file_name = os.path.basename(file_path)
         print(f"\n--- 🔄 {file_name} 처리 중 ---")
-        file_path = os.path.join(cfg.DATA_PATH, file_name)
 
         try:
             # --- M1. 데이터 로드 ---
@@ -91,7 +105,7 @@ def run_full_pipeline(cfg: DictConfig):
     # 4. 📊 모든 결과를 하나의 DataFrame으로 통합
     if not all_kpi_results:
         print("[INFO] 처리된 데이터가 없어 파이프라인을 종료합니다.")
-        return
+        return None, None # (🔥 수정) 데이터 없음 반환
         
     final_kpi_df = pd.DataFrame(all_kpi_results)
     
@@ -100,3 +114,6 @@ def run_full_pipeline(cfg: DictConfig):
     
     print(f"\n[SUCCESS] 모든 파일 처리가 완료되었습니다.")
     print(f"총 {len(final_kpi_df)}개의 Epoch(행)과 {len(final_kpi_df.columns)}개의 KPI(열)가 저장되었습니다.")
+    
+    # (🔥 수정) 정상 완료 시 DataFrame과 빈 Metrics 반환
+    return final_kpi_df, {}
