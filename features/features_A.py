@@ -1,84 +1,95 @@
-# 📜 features/features_A.py
-# 🧮 [모듈 5-A] 형태학적 & 시간축 KPI 계산 함수들
-# (🔥 "교회 vs 시장" 목표에 맞게 ERP 로직이 제거됨)
+"""
+features_A.py
+=============
+Time-Domain Feature Extraction (Full Feature Set)
+
+주요 기능:
+- Amplitude Features (5개)
+- Statistical Features (6개)
+- Pattern Features (4개)
+- Hjorth Parameters (2개)
+
+총 17개 Time-Domain KPI 추출
+"""
 
 import numpy as np
-from scipy.stats import skew, kurtosis
+from scipy import stats
 from scipy.signal import find_peaks
-from omegaconf import DictConfig
+from typing import Dict
 
-def get_A_features(epoch_data: np.ndarray, cfg: DictConfig, kpi_row: dict):
+
+def compute_time_features(data: np.ndarray, sr: int) -> Dict[str, float]:
     """
-    Epoch 데이터(단일 Epoch)에서 A 카테고리의 모든 KPI를 추출합니다.
-    (🔥 수정됨: ERP 관련 로직 삭제. 5초 Epoch의 일반 통계만 계산)
+    Time-Domain 특징 추출.
 
-    Args:
-        epoch_data (np.ndarray): (n_channels, n_samples) 형태의 2D 배열.
-        cfg (config): config.py 모듈 객체
-        kpi_row (dict): KPI 결과를 누적할 딕셔너리 (수정됨)
+    Parameters
+    ----------
+    data : np.ndarray
+        1D array, EEG 신호 (단일 채널).
+    sr : int
+        샘플링 레이트 (Hz).
+
+    Returns
+    -------
+    dict
+        Time-Domain KPI 딕셔너리.
     """
-    
-    sfreq = cfg.SAMPLE_RATE
-    ch_names = cfg.CHANNELS
+    features = {}
+    epsilon = 1e-10  # Division by zero 방지
 
-    # --- (🔥 삭제됨) "1. ERP-like 특징..." 섹션 삭제 ---
-    # (5초 상태 Epoch에서는 ERP를 계산하지 않습니다.)
+    try:
+        # ===== 1. Amplitude Features (5개) =====
+        features['amp_max'] = np.max(data)
+        features['amp_min'] = np.min(data)
+        features['amp_p2p'] = np.ptp(data)  # Peak-to-Peak
+        features['amp_mean'] = np.mean(data)
+        features['amp_rms'] = np.sqrt(np.mean(np.square(data)))
 
-    # --- 2. 각 채널(Fp1, Fp2)을 순회하며 KPI 계산 ---
-    for i, ch_name in enumerate(ch_names):
-        x = epoch_data[i, :]  # (n_samples,) 1D 배열
-        
-        # 0으로 나누기 오류 방지용 상수
-        epsilon = 1e-10 
-        
-        # --- A-1. 진폭/크기 특징 (Amplitude/Magnitude) ---
-        kpi_row[f'{ch_name}_A_amp_max'] = np.max(x)
-        kpi_row[f'{ch_name}_A_amp_min'] = np.min(x)
-        kpi_row[f'{ch_name}_A_amp_p2p'] = np.max(x) - np.min(x)
-        kpi_row[f'{ch_name}_A_amp_mean'] = np.mean(x)
-        kpi_row[f'{ch_name}_A_amp_rms'] = np.sqrt(np.mean(np.square(x)))
+        # ===== 2. Statistical Features (6개) =====
+        features['stat_mean'] = np.mean(data)
+        features['stat_std'] = np.std(data)
+        features['stat_variance'] = np.var(data)
+        features['stat_median'] = np.median(data)
+        features['stat_skewness'] = stats.skew(data)
+        features['stat_kurtosis'] = stats.kurtosis(data)
 
-        # --- A-2. 시간/지연 특징 (Temporal/Latency) ---
-        # ⚡️ 영점 교차율 (ZCR)
-        kpi_row[f'{ch_name}_A_zcr'] = ((x[:-1] * x[1:]) < 0).sum() / (len(x) - 1)
-        
-        # 📐 파형 슬로프 (Mean Absolute Slope)
-        dx = np.diff(x)
-        kpi_row[f'{ch_name}_A_slope_mean'] = np.mean(np.abs(dx))
-        
-        # 🌀 Hjorth Mobility (이동성)
-        # (dx가 이미 계산됨)
-        var_x = np.var(x)
+        # ===== 3. Pattern Features (4개) =====
+        # Zero Crossing Rate
+        zero_crossings = np.where(np.diff(np.sign(data)))[0]
+        features['zcr'] = len(zero_crossings) / len(data)
+
+        # Slope Mean (평균 기울기)
+        dx = np.diff(data)
+        features['slope_mean'] = np.mean(np.abs(dx))
+
+        # Peak Detection
+        peaks, properties = find_peaks(data, height=0)
+        features['peak_count'] = len(peaks)
+        if len(peaks) > 0:
+            features['peak_mean_height'] = np.mean(properties['peak_heights'])
+        else:
+            features['peak_mean_height'] = 0.0
+
+        # ===== 4. Hjorth Parameters (2개) =====
+        # Hjorth Mobility = sqrt(var(dx) / var(x))
+        var_x = np.var(data)
         var_dx = np.var(dx)
-        mobility = np.sqrt(var_dx / (var_x + epsilon))
-        kpi_row[f'{ch_name}_A_hjorth_mobility'] = mobility
-        
-        # ⏱️ (추가) 주요 피크 개수 (Num Peaks)
-        # (노이즈로 인한 자잘한 피크를 제외하기 위해, 표준편차의 절반 이상 높이만 카운트)
-        peaks, _ = find_peaks(x, height=np.std(x) * 0.5)
-        kpi_row[f'{ch_name}_A_num_peaks'] = len(peaks)
+        features['hjorth_mobility'] = np.sqrt(var_dx / (var_x + epsilon))
 
-        # --- A-3. 적분 특징 (Integral) ---
-        # 🗺️ AUC (Area Under the Curve)
-        kpi_row[f'{ch_name}_A_auc'] = np.trapz(np.abs(x), dx=1/sfreq)
-
-        # --- A-4. 통계적/분포적 특징 (Statistical/Distributional) ---
-        # M2️⃣ Hjorth Activity (활동성) / 분산
-        kpi_row[f'{ch_name}_A_stat_variance'] = var_x
-        
-        # M3️⃣ 3차 모멘트 (Skewness, 왜도)
-        kpi_row[f'{ch_name}_A_stat_skewness'] = skew(x)
-        
-        # M4️⃣ 4차 모멘트 (Kurtosis, 첨도)
-        kpi_row[f'{ch_name}_A_stat_kurtosis'] = kurtosis(x)
-        
-        # 🌀 Hjorth Complexity (복잡성)
+        # Hjorth Complexity = Mobility(dx) / Mobility(x)
         ddx = np.diff(dx)
         var_ddx = np.var(ddx)
         mobility_dx = np.sqrt(var_ddx / (var_dx + epsilon))
-        complexity = mobility_dx / (mobility + epsilon)
-        kpi_row[f'{ch_name}_A_hjorth_complexity'] = complexity
-        
-    # --- (🔥 삭제됨) "A-5. ERP-like 특징..." 섹션 삭제 ---
+        features['hjorth_complexity'] = mobility_dx / (features['hjorth_mobility'] + epsilon)
 
-    # (kpi_row 딕셔너리가 수정되었으므로, 별도 반환값 없음)
+    except Exception as e:
+        # 전체 실패 시 모든 값 NaN
+        for key in [
+            'amp_max', 'amp_min', 'amp_p2p', 'amp_mean', 'amp_rms',
+            'stat_mean', 'stat_std', 'stat_variance', 'stat_median', 'stat_skewness', 'stat_kurtosis',
+            'zcr', 'slope_mean', 'peak_count', 'peak_mean_height',
+            'hjorth_mobility', 'hjorth_complexity'
+        ]:
+            features[key] = np.nan
+
+    return features

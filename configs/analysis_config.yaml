@@ -1,0 +1,38 @@
+# 신규 분석 설정 (OmegaConf)
+PATHS:
+  data_dir: ./raw_data
+  output_dir: ./output
+  log_file: ./output/analysis.log
+
+PREPROCESSING:
+  sampling_rate: 250
+  filter_band:
+    low: 0.5
+    high: 50.0
+  notch_freq: 60.0
+  artifact_threshold_uv: 150.0
+
+EPOCH:
+  window_sec: 4.0
+  overlap_sec: 2.0
+
+BANDS:
+  Delta: [0.5, 4.0]
+  Theta: [4.0, 8.0]
+  Alpha: [8.0, 13.0]
+  Beta: [13.0, 30.0]
+  Gamma: [30.0, 50.0]
+
+KPI_SELECT:
+  core:
+    - band_powers
+    - basic_stats
+  optional:
+    - asymmetry
+    - coherence
+    - sef90
+    - center_freq
+    - spectral_entropy
+    - ratios
+    - nonlinear
+    - alpha_burst
